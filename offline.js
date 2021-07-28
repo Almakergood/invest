@@ -1,14 +1,14 @@
 ﻿{
-	"version": 1627484318,
+	"version": 1627488972,
 	"fileList": [
 		"data.js",
 		"c2runtime.js",
 		"jquery-3.4.1.min.js",
 		"offlineClient.js",
 		"pro-sheet0.png",
+		"pro-sheet1.png",
 		"add-sheet0.png",
 		"proinfo-sheet0.png",
-		"proinfo-sheet1.png",
 		"sprite2-sheet0.png",
 		"bg1-sheet0.png",
 		"bg3-sheet0.png",
@@ -22,6 +22,7 @@
 		"icon-128.png",
 		"icon-256.png",
 		"loading-logo.png",
+		"01.jpg",
 		"SweetAlert.css",
 		"SweetAlert.js"
 	]
