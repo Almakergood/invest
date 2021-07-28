@@ -20451,6 +20451,7 @@ cr.getObjectRefTable = function () { return [
 	cr.system_object.prototype.cnds.IsGroupActive,
 	cr.system_object.prototype.cnds.OnLayoutStart,
 	cr.plugins_.TextBox.prototype.acts.SetCSSStyle,
+	cr.plugins_.SweetAlert.prototype.acts.Style,
 	cr.plugins_.Sprite.prototype.acts.Destroy,
 	cr.plugins_.LocalStorage.prototype.acts.GetItem,
 	cr.plugins_.LocalStorage.prototype.cnds.OnItemGet,
