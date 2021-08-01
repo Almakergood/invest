@@ -15928,6 +15928,808 @@ cr.plugins_.Arr = function(runtime)
 }());
 ;
 ;
+cr.plugins_.Browser = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Browser.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	var offlineScriptReady = false;
+	var browserPluginReady = false;
+	document.addEventListener("DOMContentLoaded", function ()
+	{
+		if (window["C2_RegisterSW"] && navigator["serviceWorker"])
+		{
+			var offlineClientScript = document.createElement("script");
+			offlineClientScript.onload = function ()
+			{
+				offlineScriptReady = true;
+				checkReady()
+			};
+			offlineClientScript.src = "offlineClient.js";
+			document.head.appendChild(offlineClientScript);
+		}
+	});
+	var browserInstance = null;
+	typeProto.onAppBegin = function ()
+	{
+		browserPluginReady = true;
+		checkReady();
+	};
+	function checkReady()
+	{
+		if (offlineScriptReady && browserPluginReady && window["OfflineClientInfo"])
+		{
+			window["OfflineClientInfo"]["SetMessageCallback"](function (e)
+			{
+				browserInstance.onSWMessage(e);
+			});
+		}
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+		var self = this;
+		window.addEventListener("resize", function () {
+			self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnResize, self);
+		});
+		browserInstance = this;
+		if (typeof navigator.onLine !== "undefined")
+		{
+			window.addEventListener("online", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOnline, self);
+			});
+			window.addEventListener("offline", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOffline, self);
+			});
+		}
+		if (!this.runtime.isDirectCanvas)
+		{
+			document.addEventListener("appMobi.device.update.available", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, self);
+			});
+			document.addEventListener("backbutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+			});
+			document.addEventListener("menubutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnMenuButton, self);
+			});
+			document.addEventListener("searchbutton", function() {
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnSearchButton, self);
+			});
+			document.addEventListener("tizenhwkey", function (e) {
+				var ret;
+				switch (e["keyName"]) {
+				case "back":
+					ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+					if (!ret)
+					{
+						if (window["tizen"])
+							window["tizen"]["application"]["getCurrentApplication"]()["exit"]();
+					}
+					break;
+				case "menu":
+					ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnMenuButton, self);
+					if (!ret)
+						e.preventDefault();
+					break;
+				}
+			});
+		}
+		if (this.runtime.isWindows10 && typeof Windows !== "undefined")
+		{
+			Windows["UI"]["Core"]["SystemNavigationManager"]["getForCurrentView"]().addEventListener("backrequested", function (e)
+			{
+				var ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+				if (ret)
+					e["handled"] = true;
+		    });
+		}
+		else if (this.runtime.isWinJS && WinJS["Application"])
+		{
+			WinJS["Application"]["onbackclick"] = function (e)
+			{
+				return !!self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
+			};
+		}
+		this.runtime.addSuspendCallback(function(s) {
+			if (s)
+			{
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnPageHidden, self);
+			}
+			else
+			{
+				self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnPageVisible, self);
+			}
+		});
+		this.is_arcade = (typeof window["is_scirra_arcade"] !== "undefined");
+	};
+	instanceProto.onSWMessage = function (e)
+	{
+		var messageType = e["data"]["type"];
+		if (messageType === "downloading-update")
+			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateFound, this);
+		else if (messageType === "update-ready" || messageType === "update-pending")
+			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, this);
+		else if (messageType === "offline-ready")
+			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOfflineReady, this);
+	};
+	var batteryManager = null;
+	var loadedBatteryManager = false;
+	function maybeLoadBatteryManager()
+	{
+		if (loadedBatteryManager)
+			return;
+		if (!navigator["getBattery"])
+			return;
+		var promise = navigator["getBattery"]();
+		loadedBatteryManager = true;
+		if (promise)
+		{
+			promise.then(function (manager) {
+				batteryManager = manager;
+			});
+		}
+	};
+	function Cnds() {};
+	Cnds.prototype.CookiesEnabled = function()
+	{
+		return navigator ? navigator.cookieEnabled : false;
+	};
+	Cnds.prototype.IsOnline = function()
+	{
+		return navigator ? navigator.onLine : false;
+	};
+	Cnds.prototype.HasJava = function()
+	{
+		return navigator ? navigator.javaEnabled() : false;
+	};
+	Cnds.prototype.OnOnline = function()
+	{
+		return true;
+	};
+	Cnds.prototype.OnOffline = function()
+	{
+		return true;
+	};
+	Cnds.prototype.IsDownloadingUpdate = function ()
+	{
+		return false;		// deprecated
+	};
+	Cnds.prototype.OnUpdateReady = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.PageVisible = function ()
+	{
+		return !this.runtime.isSuspended;
+	};
+	Cnds.prototype.OnPageVisible = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnPageHidden = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnResize = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsFullscreen = function ()
+	{
+		return !!(document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || this.runtime.isNodeFullscreen);
+	};
+	Cnds.prototype.OnBackButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnMenuButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnSearchButton = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsMetered = function ()
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			return false;
+		return !!connection["metered"];
+	};
+	Cnds.prototype.IsCharging = function ()
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (battery)
+		{
+			return !!battery["charging"]
+		}
+		else
+		{
+			maybeLoadBatteryManager();
+			if (batteryManager)
+			{
+				return !!batteryManager["charging"];
+			}
+			else
+			{
+				return true;		// if unknown, default to charging (powered)
+			}
+		}
+	};
+	Cnds.prototype.IsPortraitLandscape = function (p)
+	{
+		var current = (window.innerWidth <= window.innerHeight ? 0 : 1);
+		return current === p;
+	};
+	Cnds.prototype.SupportsFullscreen = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+			return true;
+		var elem = this.runtime.canvasdiv || this.runtime.canvas;
+		return !!(elem["requestFullscreen"] || elem["mozRequestFullScreen"] || elem["msRequestFullscreen"] || elem["webkitRequestFullScreen"]);
+	};
+	Cnds.prototype.OnUpdateFound = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnUpdateReady = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnOfflineReady = function ()
+	{
+		return true;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.Alert = function (msg)
+	{
+		if (!this.runtime.isDomFree)
+			alert(msg.toString());
+	};
+	Acts.prototype.Close = function ()
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["forceToFinish"]();
+		else if (window["tizen"])
+			window["tizen"]["application"]["getCurrentApplication"]()["exit"]();
+		else if (navigator["app"] && navigator["app"]["exitApp"])
+			navigator["app"]["exitApp"]();
+		else if (navigator["device"] && navigator["device"]["exitApp"])
+			navigator["device"]["exitApp"]();
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.close();
+	};
+	Acts.prototype.Focus = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+		{
+			var win = window["nwgui"]["Window"]["get"]();
+			win["focus"]();
+		}
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.focus();
+	};
+	Acts.prototype.Blur = function ()
+	{
+		if (this.runtime.isNodeWebkit)
+		{
+			var win = window["nwgui"]["Window"]["get"]();
+			win["blur"]();
+		}
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.blur();
+	};
+	Acts.prototype.GoBack = function ()
+	{
+		if (navigator["app"] && navigator["app"]["backHistory"])
+			navigator["app"]["backHistory"]();
+		else if (!this.is_arcade && !this.runtime.isDomFree && window.back)
+			window.back();
+	};
+	Acts.prototype.GoForward = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree && window.forward)
+			window.forward();
+	};
+	Acts.prototype.GoHome = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree && window.home)
+			window.home();
+	};
+	Acts.prototype.GoToURL = function (url, target)
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["openURL"](url);
+		else if (this.runtime.isEjecta)
+			ejecta["openURL"](url);
+		else if (this.runtime.isWinJS)
+			Windows["System"]["Launcher"]["launchUriAsync"](new Windows["Foundation"]["Uri"](url));
+		else if (navigator["app"] && navigator["app"]["loadUrl"])
+			navigator["app"]["loadUrl"](url, { "openExternal": true });
+		else if (self["cordova"] && self["cordova"]["InAppBrowser"])
+			self["cordova"]["InAppBrowser"]["open"](url, "_system");
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+		{
+			if (target === 2 && !this.is_arcade)		// top
+				window.top.location = url;
+			else if (target === 1 && !this.is_arcade)	// parent
+				window.parent.location = url;
+			else					// self
+				window.location = url;
+		}
+	};
+	Acts.prototype.GoToURLWindow = function (url, tag)
+	{
+		if (this.runtime.isCocoonJs)
+			CocoonJS["App"]["openURL"](url);
+		else if (this.runtime.isEjecta)
+			ejecta["openURL"](url);
+		else if (this.runtime.isWinJS)
+			Windows["System"]["Launcher"]["launchUriAsync"](new Windows["Foundation"]["Uri"](url));
+		else if (navigator["app"] && navigator["app"]["loadUrl"])
+			navigator["app"]["loadUrl"](url, { "openExternal": true });
+		else if (self["cordova"] && self["cordova"]["InAppBrowser"])
+			self["cordova"]["InAppBrowser"]["open"](url, "_system");
+		else if (!this.is_arcade && !this.runtime.isDomFree)
+			window.open(url, tag);
+	};
+	Acts.prototype.Reload = function ()
+	{
+		if (!this.is_arcade && !this.runtime.isDomFree)
+			window.location.reload();
+	};
+	var firstRequestFullscreen = true;
+	var crruntime = null;
+	function onFullscreenError(e)
+	{
+		if (console && console.warn)
+			console.warn("Fullscreen request failed: ", e);
+		crruntime["setSize"](window.innerWidth, window.innerHeight);
+	};
+	Acts.prototype.RequestFullScreen = function (stretchmode)
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Requesting fullscreen is not supported on this platform - the request has been ignored");
+			return;
+		}
+		if (stretchmode >= 2)
+			stretchmode += 1;
+		if (stretchmode === 6)
+			stretchmode = 2;
+		if (this.runtime.isNodeWebkit)
+		{
+			if (this.runtime.isDebug)
+			{
+				debuggerFullscreen(true);
+			}
+			else if (!this.runtime.isNodeFullscreen && window["nwgui"])
+			{
+				window["nwgui"]["Window"]["get"]()["enterFullscreen"]();
+				this.runtime.isNodeFullscreen = true;
+				this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+			}
+		}
+		else
+		{
+			if (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || document["fullScreenElement"])
+			{
+				return;
+			}
+			this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
+			var elem = document.documentElement;
+			if (firstRequestFullscreen)
+			{
+				firstRequestFullscreen = false;
+				crruntime = this.runtime;
+				elem.addEventListener("mozfullscreenerror", onFullscreenError);
+				elem.addEventListener("webkitfullscreenerror", onFullscreenError);
+				elem.addEventListener("MSFullscreenError", onFullscreenError);
+				elem.addEventListener("fullscreenerror", onFullscreenError);
+			}
+			if (elem["requestFullscreen"])
+				elem["requestFullscreen"]();
+			else if (elem["mozRequestFullScreen"])
+				elem["mozRequestFullScreen"]();
+			else if (elem["msRequestFullscreen"])
+				elem["msRequestFullscreen"]();
+			else if (elem["webkitRequestFullScreen"])
+			{
+				if (typeof Element !== "undefined" && typeof Element["ALLOW_KEYBOARD_INPUT"] !== "undefined")
+					elem["webkitRequestFullScreen"](Element["ALLOW_KEYBOARD_INPUT"]);
+				else
+					elem["webkitRequestFullScreen"]();
+			}
+		}
+	};
+	Acts.prototype.CancelFullScreen = function ()
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Exiting fullscreen is not supported on this platform - the request has been ignored");
+			return;
+		}
+		if (this.runtime.isNodeWebkit)
+		{
+			if (this.runtime.isDebug)
+			{
+				debuggerFullscreen(false);
+			}
+			else if (this.runtime.isNodeFullscreen && window["nwgui"])
+			{
+				window["nwgui"]["Window"]["get"]()["leaveFullscreen"]();
+				this.runtime.isNodeFullscreen = false;
+			}
+		}
+		else
+		{
+			if (document["exitFullscreen"])
+				document["exitFullscreen"]();
+			else if (document["mozCancelFullScreen"])
+				document["mozCancelFullScreen"]();
+			else if (document["msExitFullscreen"])
+				document["msExitFullscreen"]();
+			else if (document["webkitCancelFullScreen"])
+				document["webkitCancelFullScreen"]();
+		}
+	};
+	Acts.prototype.Vibrate = function (pattern_)
+	{
+		try {
+			var arr = pattern_.split(",");
+			var i, len;
+			for (i = 0, len = arr.length; i < len; i++)
+			{
+				arr[i] = parseInt(arr[i], 10);
+			}
+			if (navigator["vibrate"])
+				navigator["vibrate"](arr);
+			else if (navigator["mozVibrate"])
+				navigator["mozVibrate"](arr);
+			else if (navigator["webkitVibrate"])
+				navigator["webkitVibrate"](arr);
+			else if (navigator["msVibrate"])
+				navigator["msVibrate"](arr);
+		}
+		catch (e) {}
+	};
+	Acts.prototype.InvokeDownload = function (url_, filename_)
+	{
+		var a = document.createElement("a");
+		if (typeof a["download"] === "undefined")
+		{
+			window.open(url_);
+		}
+		else
+		{
+			var body = document.getElementsByTagName("body")[0];
+			a.textContent = filename_;
+			a.href = url_;
+			a["download"] = filename_;
+			body.appendChild(a);
+			var clickEvent = new MouseEvent("click");
+			a.dispatchEvent(clickEvent);
+			body.removeChild(a);
+		}
+	};
+	Acts.prototype.InvokeDownloadString = function (str_, mimetype_, filename_)
+	{
+		var datauri = "data:" + mimetype_ + "," + encodeURIComponent(str_);
+		var a = document.createElement("a");
+		if (typeof a["download"] === "undefined")
+		{
+			window.open(datauri);
+		}
+		else
+		{
+			var body = document.getElementsByTagName("body")[0];
+			a.textContent = filename_;
+			a.href = datauri;
+			a["download"] = filename_;
+			body.appendChild(a);
+			var clickEvent = new MouseEvent("click");
+			a.dispatchEvent(clickEvent);
+			body.removeChild(a);
+		}
+	};
+	Acts.prototype.ConsoleLog = function (type_, msg_)
+	{
+		if (typeof console === "undefined")
+			return;
+		if (type_ === 0 && console.log)
+			console.log(msg_.toString());
+		if (type_ === 1 && console.warn)
+			console.warn(msg_.toString());
+		if (type_ === 2 && console.error)
+			console.error(msg_.toString());
+	};
+	Acts.prototype.ConsoleGroup = function (name_)
+	{
+		if (console && console.group)
+			console.group(name_);
+	};
+	Acts.prototype.ConsoleGroupEnd = function ()
+	{
+		if (console && console.groupEnd)
+			console.groupEnd();
+	};
+	Acts.prototype.ExecJs = function (js_)
+	{
+		try {
+			if (eval)
+				eval(js_);
+		}
+		catch (e)
+		{
+			if (console && console.error)
+				console.error("Error executing Javascript: ", e);
+		}
+	};
+	var orientations = [
+		"portrait",
+		"landscape",
+		"portrait-primary",
+		"portrait-secondary",
+		"landscape-primary",
+		"landscape-secondary"
+	];
+	Acts.prototype.LockOrientation = function (o)
+	{
+		o = Math.floor(o);
+		if (o < 0 || o >= orientations.length)
+			return;
+		this.runtime.autoLockOrientation = false;
+		var orientation = orientations[o];
+		if (screen["orientation"] && screen["orientation"]["lock"])
+			screen["orientation"]["lock"](orientation);
+		else if (screen["lockOrientation"])
+			screen["lockOrientation"](orientation);
+		else if (screen["webkitLockOrientation"])
+			screen["webkitLockOrientation"](orientation);
+		else if (screen["mozLockOrientation"])
+			screen["mozLockOrientation"](orientation);
+		else if (screen["msLockOrientation"])
+			screen["msLockOrientation"](orientation);
+	};
+	Acts.prototype.UnlockOrientation = function ()
+	{
+		this.runtime.autoLockOrientation = false;
+		if (screen["orientation"] && screen["orientation"]["unlock"])
+			screen["orientation"]["unlock"]();
+		else if (screen["unlockOrientation"])
+			screen["unlockOrientation"]();
+		else if (screen["webkitUnlockOrientation"])
+			screen["webkitUnlockOrientation"]();
+		else if (screen["mozUnlockOrientation"])
+			screen["mozUnlockOrientation"]();
+		else if (screen["msUnlockOrientation"])
+			screen["msUnlockOrientation"]();
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.URL = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.toString());
+	};
+	Exps.prototype.Protocol = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.protocol);
+	};
+	Exps.prototype.Domain = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.hostname);
+	};
+	Exps.prototype.PathName = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.pathname);
+	};
+	Exps.prototype.Hash = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.hash);
+	};
+	Exps.prototype.Referrer = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : document.referrer);
+	};
+	Exps.prototype.Title = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : document.title);
+	};
+	Exps.prototype.Name = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.appName);
+	};
+	Exps.prototype.Version = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.appVersion);
+	};
+	Exps.prototype.Language = function (ret)
+	{
+		if (navigator && navigator.language)
+			ret.set_string(navigator.language);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Platform = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.platform);
+	};
+	Exps.prototype.Product = function (ret)
+	{
+		if (navigator && navigator.product)
+			ret.set_string(navigator.product);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Vendor = function (ret)
+	{
+		if (navigator && navigator.vendor)
+			ret.set_string(navigator.vendor);
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.UserAgent = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : navigator.userAgent);
+	};
+	Exps.prototype.QueryString = function (ret)
+	{
+		ret.set_string(this.runtime.isDomFree ? "" : window.location.search);
+	};
+	Exps.prototype.QueryParam = function (ret, paramname)
+	{
+		if (this.runtime.isDomFree)
+		{
+			ret.set_string("");
+			return;
+		}
+		var match = RegExp('[?&]' + paramname + '=([^&]*)').exec(window.location.search);
+		if (match)
+			ret.set_string(decodeURIComponent(match[1].replace(/\+/g, ' ')));
+		else
+			ret.set_string("");
+	};
+	Exps.prototype.Bandwidth = function (ret)
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			ret.set_float(Number.POSITIVE_INFINITY);
+		else
+		{
+			if (typeof connection["bandwidth"] !== "undefined")
+				ret.set_float(connection["bandwidth"]);
+			else if (typeof connection["downlinkMax"] !== "undefined")
+				ret.set_float(connection["downlinkMax"]);
+			else
+				ret.set_float(Number.POSITIVE_INFINITY);
+		}
+	};
+	Exps.prototype.ConnectionType = function (ret)
+	{
+		var connection = navigator["connection"] || navigator["mozConnection"] || navigator["webkitConnection"];
+		if (!connection)
+			ret.set_string("unknown");
+		else
+		{
+			ret.set_string(connection["type"] || "unknown");
+		}
+	};
+	Exps.prototype.BatteryLevel = function (ret)
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (battery)
+		{
+			ret.set_float(battery["level"]);
+		}
+		else
+		{
+			maybeLoadBatteryManager();
+			if (batteryManager)
+			{
+				ret.set_float(batteryManager["level"]);
+			}
+			else
+			{
+				ret.set_float(1);		// not supported/unknown: assume charged
+			}
+		}
+	};
+	Exps.prototype.BatteryTimeLeft = function (ret)
+	{
+		var battery = navigator["battery"] || navigator["mozBattery"] || navigator["webkitBattery"];
+		if (battery)
+		{
+			ret.set_float(battery["dischargingTime"]);
+		}
+		else
+		{
+			maybeLoadBatteryManager();
+			if (batteryManager)
+			{
+				ret.set_float(batteryManager["dischargingTime"]);
+			}
+			else
+			{
+				ret.set_float(Number.POSITIVE_INFINITY);		// not supported/unknown: assume infinite time left
+			}
+		}
+	};
+	Exps.prototype.ExecJS = function (ret, js_)
+	{
+		if (!eval)
+		{
+			ret.set_any(0);
+			return;
+		}
+		var result = 0;
+		try {
+			result = eval(js_);
+		}
+		catch (e)
+		{
+			if (console && console.error)
+				console.error("Error executing Javascript: ", e);
+		}
+		if (typeof result === "number")
+			ret.set_any(result);
+		else if (typeof result === "string")
+			ret.set_any(result);
+		else if (typeof result === "boolean")
+			ret.set_any(result ? 1 : 0);
+		else
+			ret.set_any(0);
+	};
+	Exps.prototype.ScreenWidth = function (ret)
+	{
+		ret.set_int(screen.width);
+	};
+	Exps.prototype.ScreenHeight = function (ret)
+	{
+		ret.set_int(screen.height);
+	};
+	Exps.prototype.DevicePixelRatio = function (ret)
+	{
+		ret.set_float(this.runtime.devicePixelRatio);
+	};
+	Exps.prototype.WindowInnerWidth = function (ret)
+	{
+		ret.set_int(window.innerWidth);
+	};
+	Exps.prototype.WindowInnerHeight = function (ret)
+	{
+		ret.set_int(window.innerHeight);
+	};
+	Exps.prototype.WindowOuterWidth = function (ret)
+	{
+		ret.set_int(window.outerWidth);
+	};
+	Exps.prototype.WindowOuterHeight = function (ret)
+	{
+		ret.set_int(window.outerHeight);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
 cr.plugins_.Function = function(runtime)
 {
 	this.runtime = runtime;
@@ -16508,6 +17310,103 @@ cr.plugins_.LocalStorage = function(runtime)
 		ret.set_string(errorMessage);
 	};
 	pluginProto.exps = new Exps();
+}());
+;
+;
+cr.plugins_.Rex_CopyToClipboard = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Rex_CopyToClipboard.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+        this.content = "";
+        this.succeed = false;
+	};
+	instanceProto.onDestroy = function ()
+	{
+	};
+    var copyToClipboard = function(s)
+    {
+        var targetId = "_hiddenCopyText_";
+        target = document["getElementById"](targetId);
+        if (!target)
+        {
+            var target = document["createElement"]("textarea");
+            target["style"]["position"] = "absolute";
+            target["style"]["left"] = "-9999px";
+            target["style"]["top"] = "0";
+            target["id"] = targetId;
+            document.body.appendChild(target);
+        }
+        target["textContent"] = s;
+        var currentFocus = document["activeElement"];
+        target.focus();
+        target["setSelectionRange"](0, target["value"].length);
+        var succeed;
+        try
+        {
+        	  succeed = document["execCommand"]("copy");
+        }
+        catch(e)
+        {
+            succeed = false;
+        }
+        if (currentFocus && typeof currentFocus["focus"] === "function")
+        {
+            currentFocus["focus"]();
+        }
+        target["textContent"] = "";
+        return succeed;
+    };
+	instanceProto.saveToJSON = function ()
+	{
+		return {
+			"c": this.content,
+			"s": this.succeed,
+		};
+	};
+	instanceProto.loadFromJSON = function (o)
+	{
+		this.content = o["c"];
+		this.succeed = o["s"];
+	};
+	function Cnds() {};
+	pluginProto.cnds = new Cnds();
+	Cnds.prototype.IsSuccess = function ()
+	{
+		return this.succeed;
+	};
+	function Acts() {};
+	pluginProto.acts = new Acts();
+    Acts.prototype.Copy = function (s)
+	{
+        this.content = s;
+        this.succeed = copyToClipboard(s)
+	};
+	function Exps() {};
+	pluginProto.exps = new Exps();
+    Exps.prototype.Content = function (ret)
+	{
+	    ret.set_string( this.content );
+	};
 }());
 ;
 ;
@@ -20441,290 +21340,323 @@ cr.plugins_.Touch = function(runtime)
 }());
 ;
 ;
-cr.plugins_.filechooser = function(runtime)
+cr.behaviors.Fade = function(runtime)
 {
 	this.runtime = runtime;
 };
 (function ()
 {
-	var pluginProto = cr.plugins_.filechooser.prototype;
-	pluginProto.Type = function(plugin)
+	var behaviorProto = cr.behaviors.Fade.prototype;
+	behaviorProto.Type = function(behavior, objtype)
 	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
+		this.behavior = behavior;
+		this.objtype = objtype;
+		this.runtime = behavior.runtime;
 	};
-	var typeProto = pluginProto.Type.prototype;
-	typeProto.onCreate = function()
+	var behtypeProto = behaviorProto.Type.prototype;
+	behtypeProto.onCreate = function()
 	{
 	};
-	pluginProto.Instance = function(type)
+	behaviorProto.Instance = function(type, inst)
 	{
 		this.type = type;
+		this.behavior = type.behavior;
+		this.inst = inst;				// associated object instance to modify
 		this.runtime = type.runtime;
 	};
-	var instanceProto = pluginProto.Instance.prototype;
-	var c2URL = window["URL"] || window["webkitURL"] || window["mozURL"] || window["msURL"];
-	instanceProto.onCreate = function()
+	var behinstProto = behaviorProto.Instance.prototype;
+	behinstProto.onCreate = function()
 	{
-		if (this.runtime.isDomFree)
+		this.activeAtStart = this.properties[0] === 1;
+		this.setMaxOpacity = false;					// used to retrieve maxOpacity once in first 'Start fade' action if initially inactive
+		this.fadeInTime = this.properties[1];
+		this.waitTime = this.properties[2];
+		this.fadeOutTime = this.properties[3];
+		this.destroy = this.properties[4];			// 0 = no, 1 = after fade out
+		this.stage = this.activeAtStart ? 0 : 3;		// 0 = fade in, 1 = wait, 2 = fade out, 3 = done
+		if (this.recycled)
+			this.stageTime.reset();
+		else
+			this.stageTime = new cr.KahanAdder();
+		this.maxOpacity = (this.inst.opacity ? this.inst.opacity : 1.0);
+		if (this.activeAtStart)
 		{
-			cr.logexport("[Construct 2] File Chooser plugin not supported on this platform - the object will not be created");
-			return;
-		}
-		this.elem = document.createElement("input");
-		this.elem.type = "file";
-		this.elem.setAttribute("accept", this.properties[0]);
-		if (this.properties[1] !== 0)		// multiple selection
-			this.elem.setAttribute("multiple", "");
-		this.elem.id = this.properties[3];
-		jQuery(this.elem).appendTo(this.runtime.canvasdiv ? this.runtime.canvasdiv : "body");
-		this.element_hidden = false;
-		if (this.properties[2] === 0)
-		{
-			jQuery(this.elem).hide();
-			this.visible = false;
-			this.element_hidden = true;
-		}
-		var self = this;
-		this.elem.onchange = function ()
-		{
-			self.runtime.trigger(cr.plugins_.filechooser.prototype.cnds.OnChanged, self);
-		};
-		this.lastLeft = 0;
-		this.lastTop = 0;
-		this.lastRight = 0;
-		this.lastBottom = 0;
-		this.lastWinWidth = 0;
-		this.lastWinHeight = 0;
-		this.updatePosition(true);
-		this.runtime.tickMe(this);
-	};
-	instanceProto.onDestroy = function ()
-	{
-		if (this.runtime.isDomFree)
-			return;
-		jQuery(this.elem).remove();
-		this.elem = null;
-	};
-	instanceProto.tick = function ()
-	{
-		this.updatePosition();
-	};
-	var last_canvas_offset = null;
-	var last_checked_tick = -1;
-	instanceProto.updatePosition = function (first)
-	{
-		if (this.runtime.isDomFree)
-			return;
-		var left = this.layer.layerToCanvas(this.x, this.y, true);
-		var top = this.layer.layerToCanvas(this.x, this.y, false);
-		var right = this.layer.layerToCanvas(this.x + this.width, this.y + this.height, true);
-		var bottom = this.layer.layerToCanvas(this.x + this.width, this.y + this.height, false);
-		var rightEdge = this.runtime.width / this.runtime.devicePixelRatio;
-		var bottomEdge = this.runtime.height / this.runtime.devicePixelRatio;
-		if (!this.visible || !this.layer.visible || right <= 0 || bottom <= 0 || left >= rightEdge || top >= bottomEdge)
-		{
-			if (!this.element_hidden)
-				jQuery(this.elem).hide();
-			this.element_hidden = true;
-			return;
-		}
-		if (left < 1)
-			left = 1;
-		if (top < 1)
-			top = 1;
-		if (right >= rightEdge)
-			right = rightEdge - 1;
-		if (bottom >= bottomEdge)
-			bottom = bottomEdge - 1;
-		var curWinWidth = window.innerWidth;
-		var curWinHeight = window.innerHeight;
-		if (!first && this.lastLeft === left && this.lastTop === top && this.lastRight === right && this.lastBottom === bottom && this.lastWinWidth === curWinWidth && this.lastWinHeight === curWinHeight)
-		{
-			if (this.element_hidden)
+			if (this.fadeInTime === 0)
 			{
-				jQuery(this.elem).show();
-				this.element_hidden = false;
+				this.stage = 1;
+				if (this.waitTime === 0)
+					this.stage = 2;
 			}
-			return;
+			else
+			{
+				this.inst.opacity = 0;
+				this.runtime.redraw = true;
+			}
 		}
-		this.lastLeft = left;
-		this.lastTop = top;
-		this.lastRight = right;
-		this.lastBottom = bottom;
-		this.lastWinWidth = curWinWidth;
-		this.lastWinHeight = curWinHeight;
-		if (this.element_hidden)
+	};
+	behinstProto.saveToJSON = function ()
+	{
+		return {
+			"fit": this.fadeInTime,
+			"wt": this.waitTime,
+			"fot": this.fadeOutTime,
+			"s": this.stage,
+			"st": this.stageTime.sum,
+			"mo": this.maxOpacity,
+		};
+	};
+	behinstProto.loadFromJSON = function (o)
+	{
+		this.fadeInTime = o["fit"];
+		this.waitTime = o["wt"];
+		this.fadeOutTime = o["fot"];
+		this.stage = o["s"];
+		this.stageTime.reset();
+		this.stageTime.sum = o["st"];
+		this.maxOpacity = o["mo"];
+	};
+	behinstProto.tick = function ()
+	{
+		this.stageTime.add(this.runtime.getDt(this.inst));
+		if (this.stage === 0)
 		{
-			jQuery(this.elem).show();
-			this.element_hidden = false;
+			this.inst.opacity = (this.stageTime.sum / this.fadeInTime) * this.maxOpacity;
+			this.runtime.redraw = true;
+			if (this.inst.opacity >= this.maxOpacity)
+			{
+				this.inst.opacity = this.maxOpacity;
+				this.stage = 1;	// wait stage
+				this.stageTime.reset();
+				this.runtime.trigger(cr.behaviors.Fade.prototype.cnds.OnFadeInEnd, this.inst);
+			}
 		}
-		var offx = Math.round(left) + jQuery(this.runtime.canvas).offset().left;
-		var offy = Math.round(top) + jQuery(this.runtime.canvas).offset().top;
-		jQuery(this.elem).css("position", "absolute");
-		jQuery(this.elem).offset({left: offx, top: offy});
-		jQuery(this.elem).width(Math.round(right - left));
-		jQuery(this.elem).height(Math.round(bottom - top));
-	};
-	instanceProto.draw = function(ctx)
-	{
-	};
-	instanceProto.drawGL = function(glw)
-	{
-	};
-	function Cnds() {};
-	Cnds.prototype.OnChanged = function ()
-	{
-		return true;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.SetVisible = function (vis)
-	{
-		if (this.runtime.isDomFree)
-			return;
-		this.visible = (vis !== 0);
-	};
-	Acts.prototype.SetCSSStyle = function (p, v)
-	{
-		if (this.runtime.isDomFree)
-			return;
-		jQuery(this.elem).css(p, v);
-	};
-	Acts.prototype.ReleaseFile = function (f)
-	{
-		if (this.runtime.isDomFree)
-			return;
-		if (c2URL && c2URL["revokeObjectURL"])
-			c2URL["revokeObjectURL"](f);
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.FileCount = function (ret)
-	{
-		ret.set_int(this.runtime.isDomFree ? 0 : (this.elem["files"].length || 0));
-	};
-	function getFileAt(files, index)
-	{
-		if (!files)
-			return null;
-		index = Math.floor(index);
-		if (index < 0 || index >= files.length)
-			return null;
-		return files[index];
-	};
-	Exps.prototype.FileNameAt = function (ret, i)
-	{
-		var file = this.runtime.isDomFree ? null : getFileAt(this.elem["files"], i);
-		ret.set_string(file ? (file["name"] || "") : "");
-	};
-	Exps.prototype.FileSizeAt = function (ret, i)
-	{
-		var file = this.runtime.isDomFree ? null : getFileAt(this.elem["files"], i);
-		ret.set_int(file ? (file["size"] || 0) : 0);
-	};
-	Exps.prototype.FileTypeAt = function (ret, i)
-	{
-		var file = this.runtime.isDomFree ? null : getFileAt(this.elem["files"], i);
-		ret.set_string(file ? (file["type"] || "") : "");
-	};
-	Exps.prototype.FileURLAt = function (ret, i)
-	{
-		var file = this.runtime.isDomFree ? null : getFileAt(this.elem["files"], i);
-		if (!file)
+		if (this.stage === 1)
 		{
-			ret.set_string("");
+			if (this.stageTime.sum >= this.waitTime)
+			{
+				this.stage = 2;	// fade out stage
+				this.stageTime.reset();
+				this.runtime.trigger(cr.behaviors.Fade.prototype.cnds.OnWaitEnd, this.inst);
+			}
 		}
-		else if (file["c2url"])		// already created object URL
+		if (this.stage === 2)
 		{
-			ret.set_string(file["c2url"]);
+			if (this.fadeOutTime !== 0)
+			{
+				this.inst.opacity = this.maxOpacity - ((this.stageTime.sum / this.fadeOutTime) * this.maxOpacity);
+				this.runtime.redraw = true;
+				if (this.inst.opacity < 0)
+				{
+					this.inst.opacity = 0;
+					this.stage = 3;	// done
+					this.stageTime.reset();
+					this.runtime.trigger(cr.behaviors.Fade.prototype.cnds.OnFadeOutEnd, this.inst);
+					if (this.destroy === 1)
+						this.runtime.DestroyInstance(this.inst);
+				}
+			}
 		}
-		else if (c2URL && c2URL["createObjectURL"])
+	};
+	behinstProto.doStart = function ()
+	{
+		this.stage = 0;
+		this.stageTime.reset();
+		if (this.fadeInTime === 0)
 		{
-			file["c2url"] = c2URL["createObjectURL"](file);
-			ret.set_string(file["c2url"]);
+			this.stage = 1;
+			if (this.waitTime === 0)
+				this.stage = 2;
 		}
 		else
 		{
-			ret.set_string("");
+			this.inst.opacity = 0;
+			this.runtime.redraw = true;
 		}
 	};
-	pluginProto.exps = new Exps();
+	function Cnds() {};
+	Cnds.prototype.OnFadeOutEnd = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnFadeInEnd = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnWaitEnd = function ()
+	{
+		return true;
+	};
+	behaviorProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.StartFade = function ()
+	{
+		if (!this.activeAtStart && !this.setMaxOpacity)
+		{
+			this.maxOpacity = (this.inst.opacity ? this.inst.opacity : 1.0);
+			this.setMaxOpacity = true;
+		}
+		if (this.stage === 3)
+			this.doStart();
+	};
+	Acts.prototype.RestartFade = function ()
+	{
+		this.doStart();
+	};
+	Acts.prototype.SetFadeInTime = function (t)
+	{
+		if (t < 0)
+			t = 0;
+		this.fadeInTime = t;
+	};
+	Acts.prototype.SetWaitTime = function (t)
+	{
+		if (t < 0)
+			t = 0;
+		this.waitTime = t;
+	};
+	Acts.prototype.SetFadeOutTime = function (t)
+	{
+		if (t < 0)
+			t = 0;
+		this.fadeOutTime = t;
+	};
+	behaviorProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.FadeInTime = function (ret)
+	{
+		ret.set_float(this.fadeInTime);
+	};
+	Exps.prototype.WaitTime = function (ret)
+	{
+		ret.set_float(this.waitTime);
+	};
+	Exps.prototype.FadeOutTime = function (ret)
+	{
+		ret.set_float(this.fadeOutTime);
+	};
+	behaviorProto.exps = new Exps();
 }());
 cr.getObjectRefTable = function () { return [
-	cr.plugins_.Arr,
-	cr.plugins_.filechooser,
 	cr.plugins_.Function,
 	cr.plugins_.LocalStorage,
-	cr.plugins_.Sprite,
-	cr.plugins_.Text,
-	cr.plugins_.SweetAlert,
-	cr.plugins_.TextBox,
+	cr.plugins_.Rex_CopyToClipboard,
 	cr.plugins_.Touch,
+	cr.plugins_.Sprite,
+	cr.plugins_.SweetAlert,
+	cr.plugins_.Text,
+	cr.plugins_.TextBox,
+	cr.plugins_.Arr,
+	cr.plugins_.Browser,
+	cr.behaviors.Fade,
 	cr.system_object.prototype.cnds.IsGroupActive,
 	cr.system_object.prototype.cnds.OnLayoutStart,
-	cr.plugins_.TextBox.prototype.acts.SetCSSStyle,
-	cr.plugins_.SweetAlert.prototype.acts.Style,
-	cr.plugins_.Sprite.prototype.acts.Destroy,
-	cr.plugins_.LocalStorage.prototype.acts.GetItem,
-	cr.plugins_.LocalStorage.prototype.cnds.OnItemGet,
-	cr.plugins_.Arr.prototype.acts.JSONLoad,
-	cr.plugins_.LocalStorage.prototype.exps.ItemValue,
-	cr.plugins_.Arr.prototype.cnds.ArrForEach,
-	cr.system_object.prototype.acts.CreateObject,
-	cr.plugins_.Sprite.prototype.acts.LoadFromJsonString,
-	cr.plugins_.Arr.prototype.exps.At,
-	cr.plugins_.Arr.prototype.exps.CurX,
-	cr.plugins_.Text.prototype.acts.SetText,
-	cr.plugins_.Text.prototype.acts.SetPos,
-	cr.plugins_.Sprite.prototype.exps.X,
-	cr.plugins_.Sprite.prototype.exps.Y,
-	cr.plugins_.Sprite.prototype.exps.Height,
-	cr.plugins_.Sprite.prototype.acts.SetAnimFrame,
-	cr.plugins_.Sprite.prototype.acts.LoadURL,
-	cr.plugins_.Touch.prototype.cnds.OnTapGesture,
-	cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
-	cr.system_object.prototype.cnds.CompareVar,
-	cr.system_object.prototype.acts.SetVar,
-	cr.system_object.prototype.acts.SetLayerVisible,
-	cr.system_object.prototype.cnds.PickByComparison,
-	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
-	cr.plugins_.TextBox.prototype.exps.Text,
+	cr.plugins_.Arr.prototype.acts.SetXY,
 	cr.plugins_.Function.prototype.acts.CallFunction,
 	cr.plugins_.Touch.prototype.cnds.OnTapGestureObject,
-	cr.system_object.prototype.exps.scrollx,
-	cr.system_object.prototype.acts.SetGroupActive,
-	cr.plugins_.Text.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.TextBox.prototype.acts.SetText,
-	cr.system_object.prototype.acts.ScrollX,
-	cr.system_object.prototype.exps.lerp,
-	cr.system_object.prototype.cnds.CompareBetween,
-	cr.plugins_.SweetAlert.prototype.acts.StyleBackground,
+	cr.plugins_.Sprite.prototype.cnds.PickByUID,
 	cr.plugins_.SweetAlert.prototype.acts.Input,
-	cr.plugins_.Function.prototype.cnds.OnFunction,
-	cr.plugins_.Arr.prototype.acts.SetX,
-	cr.plugins_.Sprite.prototype.exps.AsJSON,
-	cr.plugins_.LocalStorage.prototype.acts.SetItem,
-	cr.plugins_.Arr.prototype.exps.AsJSON,
 	cr.plugins_.SweetAlert.prototype.cnds.OnConfirm,
-	cr.plugins_.Arr.prototype.exps.Width,
-	cr.system_object.prototype.exps.floor,
+	cr.plugins_.Arr.prototype.acts.Push,
 	cr.system_object.prototype.exps.mid,
 	cr.plugins_.SweetAlert.prototype.exps.GetLastValueAt,
 	cr.system_object.prototype.exps.len,
 	cr.system_object.prototype.exps.trim,
-	cr.plugins_.Arr.prototype.acts.Push,
-	cr.plugins_.Sprite.prototype.cnds.PickByUID,
-	cr.plugins_.Sprite.prototype.acts.AddInstanceVar,
+	cr.plugins_.Arr.prototype.exps.Width,
+	cr.system_object.prototype.exps["float"],
+	cr.system_object.prototype.acts.CreateObject,
+	cr.plugins_.Text.prototype.acts.SetInstanceVar,
+	cr.plugins_.Text.prototype.acts.SetText,
+	cr.plugins_.Arr.prototype.exps.At,
+	cr.plugins_.Text.prototype.acts.SetWidth,
+	cr.system_object.prototype.exps.round,
+	cr.plugins_.Function.prototype.cnds.OnFunction,
+	cr.plugins_.Function.prototype.exps.Param,
+	cr.plugins_.Text.prototype.cnds.CompareInstanceVar,
+	cr.system_object.prototype.cnds.For,
+	cr.system_object.prototype.acts.AddVar,
+	cr.system_object.prototype.exps.loopindex,
+	cr.plugins_.Text.prototype.acts.AppendText,
+	cr.plugins_.TextBox.prototype.acts.SetCSSStyle,
+	cr.plugins_.SweetAlert.prototype.acts.Style,
+	cr.plugins_.SweetAlert.prototype.acts.StyleBackground,
+	cr.plugins_.Sprite.prototype.acts.Destroy,
+	cr.plugins_.LocalStorage.prototype.acts.ClearStorage,
+	cr.plugins_.LocalStorage.prototype.acts.GetItem,
+	cr.system_object.prototype.acts.SetVar,
+	cr.plugins_.Browser.prototype.exps.ExecJS,
+	cr.plugins_.Sprite.prototype.acts.SetAnimFrame,
+	cr.plugins_.Touch.prototype.cnds.OnTouchObject,
+	cr.plugins_.Sprite.prototype.acts.SetSize,
+	cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
+	cr.system_object.prototype.cnds.TriggerOnce,
+	cr.plugins_.SweetAlert.prototype.cnds.IsOpen,
+	cr.plugins_.Touch.prototype.cnds.OnTouchStart,
+	cr.plugins_.Touch.prototype.exps.Y,
+	cr.system_object.prototype.cnds.CompareBetween,
+	cr.system_object.prototype.exps.scrollx,
+	cr.system_object.prototype.exps.floor,
+	cr.plugins_.Touch.prototype.cnds.IsInTouch,
+	cr.system_object.prototype.cnds.Else,
+	cr.system_object.prototype.cnds.CompareVar,
+	cr.system_object.prototype.exps.dt,
+	cr.system_object.prototype.acts.SubVar,
+	cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.SetY,
+	cr.plugins_.Text.prototype.acts.SetPos,
+	cr.plugins_.Sprite.prototype.exps.X,
+	cr.plugins_.Sprite.prototype.exps.Y,
+	cr.plugins_.Sprite.prototype.exps.Height,
+	cr.plugins_.Text.prototype.exps.Height,
+	cr.behaviors.Fade.prototype.acts.RestartFade,
+	cr.system_object.prototype.acts.ScrollX,
+	cr.plugins_.LocalStorage.prototype.cnds.OnItemGet,
+	cr.plugins_.Arr.prototype.acts.JSONLoad,
+	cr.plugins_.LocalStorage.prototype.exps.ItemValue,
+	cr.plugins_.Arr.prototype.cnds.ArrForEach,
+	cr.plugins_.Sprite.prototype.acts.LoadFromJsonString,
+	cr.plugins_.Arr.prototype.exps.CurValue,
+	cr.plugins_.Sprite.prototype.acts.SetPos,
+	cr.plugins_.Arr.prototype.exps.CurX,
+	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+	cr.plugins_.Touch.prototype.cnds.OnTapGesture,
+	cr.plugins_.TextBox.prototype.cnds.IsOnScreen,
+	cr.plugins_.TextBox.prototype.acts.SetPos,
+	cr.plugins_.TextBox.prototype.exps.Text,
 	cr.system_object.prototype.cnds.Repeat,
 	cr.system_object.prototype.exps.tokencount,
-	cr.system_object.prototype.acts.AddVar,
-	cr.system_object.prototype.exps["int"],
 	cr.system_object.prototype.exps.tokenat,
-	cr.system_object.prototype.exps.loopindex,
+	cr.system_object.prototype.exps.newline,
+	cr.plugins_.TextBox.prototype.acts.SetHeight,
+	cr.plugins_.Text.prototype.exps.X,
+	cr.plugins_.Text.prototype.exps.Width,
+	cr.plugins_.Text.prototype.exps.Y,
+	cr.plugins_.TextBox.prototype.acts.SetText,
+	cr.plugins_.Sprite.prototype.cnds.CompareFrame,
+	cr.system_object.prototype.acts.SetGroupActive,
+	cr.plugins_.Rex_CopyToClipboard.prototype.acts.Copy,
+	cr.plugins_.Sprite.prototype.exps.AnimationFrame,
+	cr.plugins_.Sprite.prototype.exps.UID,
+	cr.system_object.prototype.cnds.ForEach,
+	cr.system_object.prototype.exps["int"],
+	cr.system_object.prototype.exps.lerp,
+	cr.plugins_.Arr.prototype.acts.SetX,
+	cr.plugins_.Sprite.prototype.exps.AsJSON,
+	cr.plugins_.LocalStorage.prototype.acts.SetItem,
+	cr.plugins_.Arr.prototype.exps.AsJSON,
+	cr.plugins_.Arr.prototype.acts.Delete,
+	cr.system_object.prototype.acts.Wait,
+	cr.system_object.prototype.cnds.Compare,
+	cr.plugins_.Sprite.prototype.exps.AnimationFrameCount,
+	cr.plugins_.Sprite.prototype.acts.AddInstanceVar,
 	cr.plugins_.Text.prototype.acts.SetFontColor,
 	cr.system_object.prototype.exps.rgb,
 	cr.system_object.prototype.cnds.IsNaN,
-	cr.plugins_.filechooser.prototype.cnds.OnChanged,
-	cr.plugins_.filechooser.prototype.exps.FileURLAt
+	cr.plugins_.Sprite.prototype.acts.MoveToLayer,
+	cr.plugins_.Text.prototype.acts.LoadFromJsonString,
+	cr.plugins_.Text.prototype.acts.MoveToLayer,
+	cr.plugins_.Touch.prototype.cnds.OnDoubleTapGestureObject,
+	cr.plugins_.Text.prototype.exps.Text,
+	cr.behaviors.Fade.prototype.acts.SetFadeInTime,
+	cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
+	cr.plugins_.TextBox.prototype.cnds.CompareText
 ];};
